@@ -40,8 +40,9 @@ What it changes:
   Linux JavaScript ECDSA P-256 key provider.
 - Lets the remote-control Connections UI render on Linux when upstream marks
   the feature unavailable or withholds the remote-control visibility rollout.
-- Keeps the `Control other devices` settings tab reachable on Linux so this
-  desktop can authorize outbound control of another enrolled device.
+- Keeps the `Control other devices` settings tab reachable on Linux, including
+  when authorization must be renewed, so this desktop can authorize outbound
+  control of another enrolled device.
 - Refreshes the remote Connections settings state every 5 seconds and
   immediately after focus, visibility, online, or resume signals.
 - Recovers a completed remote stream item when its matching started item is
@@ -114,7 +115,7 @@ feature descriptor to appear exactly once in this table.
 | `linux-remote-mobile-app-server-remote-control` | `mobile-host` | Starts this Desktop app-server with remote-control host support. |
 | `linux-remote-control-load-gate` | `outbound-control` | Allows remote-control environments to load in Connections. |
 | `linux-remote-control-feature-sync` | `shared-boundary` | Enables `remote_control` only for the local host and excludes Remote SSH hosts. |
-| `linux-remote-control-visibility` | `outbound-control` | Exposes remote-control Connections UI when the server permits it. |
+| `linux-remote-control-visibility` | `outbound-control` | Keeps the remote-control Connections UI reachable on Linux, including authorization recovery. |
 | `linux-remote-control-copy` | `shared-boundary` | Rewrites Linux copy shared by host setup and outbound Connections. |
 | `linux-remote-control-settings-ux` | `shared-boundary` | Composes outbound remote-control and Remote SSH actions in the shared settings bundle. |
 | `linux-remote-control-client-revoke-setup-reset` | `mobile-host` | Resets this host's mobile setup state only after the last external controller is removed. |
@@ -126,7 +127,7 @@ feature descriptor to appear exactly once in this table.
 | `linux-remote-control-status-read-guard` | `shared-boundary` | Sends `remoteControl/status/read` only to the local host, never Remote SSH or remote-control environment hosts. |
 | `linux-remote-control-status-wait` | `shared-boundary` | Gives the selected host a Linux-specific connection convergence window without changing host ownership. |
 | `linux-remote-control-enable-for-host-params` | `shared-boundary` | Uses the current enable/disable RPC parameter contract without choosing which host is targeted. |
-| `linux-remote-control-enablement-bridge` | `shared-boundary` | Loads outbound clients while auto-connecting only the remote-control environment owned by this Desktop. |
+| `linux-remote-control-enablement-bridge` | `shared-boundary` | Loads outbound clients and auto-connects the remote-control environment owned by this Desktop without overwriting saved choices for other hosts. |
 | `linux-remote-mobile-active-status` | `mobile-host` | Derives mobile active state from the local thread runtime. |
 
 Remote SSH behavior is nested inside the shared settings descriptor rather than
