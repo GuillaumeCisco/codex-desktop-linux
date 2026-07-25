@@ -22,6 +22,10 @@ const {
   patchMainBundleSource,
 } = require("../../scripts/patches/runner.js");
 const {
+  applyWebviewAssetPatchDescriptors,
+  normalizePatchDescriptors,
+} = require("../../scripts/patches/engine.js");
+const {
   applyLinuxRemoteControlDeviceKeyPatch,
   applyLinuxRemoteControlClientRevokeSetupResetPatch,
   applyLinuxRemoteControlClientRevocationRecoveryPatch,
@@ -412,6 +416,13 @@ function syntheticAppMainActiveStatusBundle() {
 }
 
 function syntheticAppMainEnablementBridgeBundle() {
+  return [
+    "function OF(){let e=(0,Z.c)(6),{checkGate:t,isLoading:n}=sc(),r;e[0]===t?r=e[1]:(r=t(`1042620455`)||t(`2055603567`),e[0]=t,e[1]=r);let i=r,a,o;return e[2]!==n||e[3]!==i?(a=()=>{n||$o(`set-remote-control-connections-enabled`,{params:{enabled:i}}).catch(e=>{q.warning(`${DF} sync_failed`,{safe:{remoteControlConnectionsEnabled:i},sensitive:{error:e}})})},o=[n,i],e[2]=n,e[3]=i,e[4]=a,e[5]=o):(a=e[4],o=e[5]),(0,Q.useEffect)(a,o),null}",
+    "var DF=`[remote-connections/gate-bridge]`;",
+  ].join("");
+}
+
+function syntheticObsoleteAppMainEnablementBridgeBundle() {
   return [
     "function OF(){let e=(0,Z.c)(6),{checkGate:t,isLoading:n}=sc(),r;e[0]===t?r=e[1]:(r=t(`1042620455`),e[0]=t,e[1]=r);let i=r,a,o;return e[2]!==n||e[3]!==i?(a=()=>{n||$o(`set-remote-control-connections-enabled`,{params:{enabled:i}}).catch(e=>{q.warning(`${DF} sync_failed`,{safe:{slingshotEnabled:i},sensitive:{error:e}})})},o=[n,i],e[2]=n,e[3]=i,e[4]=a,e[5]=o):(a=e[4],o=e[5]),(0,Q.useEffect)(a,o),null}",
     "var DF=`[remote-connections/slingshot-gate-bridge]`;",
@@ -1508,7 +1519,13 @@ test("Linux remote-control visibility patch handles current settings bundle shap
 
   assert.notEqual(patched, source);
   assert.match(patched, /navigator\.userAgent\.includes\(`Linux`\)/);
-  assert.match(patched, /return\(n\|\|t\)&&\(n\|\|\(e\?\.available\?\?!0\)\)&&e\?\.accessRequired!==!0/);
+  assert.match(patched, /return n\|\|t&&\(e\?\.available\?\?!0\)&&e\?\.accessRequired!==!0/);
+  const linuxContext = { navigator: { userAgent: "Codex Desktop (Linux)" }, visible: null };
+  vm.runInNewContext(
+    `${patched.replace(/export\{Et as t\};/u, "")};visible=Et({remoteControlConnectionsState:{available:false,accessRequired:true},slingshotEnabled:false})`,
+    linuxContext,
+  );
+  assert.equal(linuxContext.visible, true);
   assert.equal(applyLinuxRemoteControlVisibilityPatch(patched), patched);
 });
 
@@ -1518,7 +1535,13 @@ test("Linux remote-control visibility patch handles current use-plugin gate shap
 
   assert.notEqual(patched, source);
   assert.match(patched, /navigator\.userAgent\.includes\(`Linux`\)/);
-  assert.match(patched, /return\(n\|\|t\)&&\(n\|\|\(e\?\.available\?\?!0\)\)&&e\?\.accessRequired!==!0/);
+  assert.match(patched, /return n\|\|t&&\(e\?\.available\?\?!0\)&&e\?\.accessRequired!==!0/);
+  const nonLinuxContext = { navigator: { userAgent: "Codex Desktop (Macintosh)" }, visible: null };
+  vm.runInNewContext(
+    `${patched.replace(/export\{ke as l\};/u, "")};visible=ke({remoteControlConnectionsState:{available:true,accessRequired:true},slingshotEnabled:true})`,
+    nonLinuxContext,
+  );
+  assert.equal(nonLinuxContext.visible, false);
   assert.equal(applyLinuxRemoteControlVisibilityPatch(patched), patched);
 });
 
@@ -2718,7 +2741,7 @@ test("Linux remote-control enablement bridge loads remote-control clients on Lin
 
   const calls = [];
   const context = {
-    DF: "[remote-connections/slingshot-gate-bridge]",
+    DF: "[remote-connections/gate-bridge]",
     navigator: { userAgent: "X11; Linux x86_64" },
     q: { warning() {} },
     Q: { useEffect(callback) { callback(); } },
@@ -2738,7 +2761,7 @@ test("Linux remote-control enablement bridge loads remote-control clients on Lin
 
 test("Linux remote-control enablement bridge rejects distant anchors", () => {
   const source = [
-    "var DF=`[remote-connections/slingshot-gate-bridge]`;",
+    "var DF=`[remote-connections/gate-bridge]`;",
     "x".repeat(4_501),
     "function OF(){return $o(`set-remote-control-connections-enabled`,{params:{enabled:true}})}",
   ].join("");
@@ -2748,6 +2771,47 @@ test("Linux remote-control enablement bridge rejects distant anchors", () => {
 
   assert.equal(result, source);
   assert.ok(warnings.some((warning) => warning.includes("anchors are too far apart")));
+});
+
+test("Linux remote-control enablement bridge rejects the obsolete slingshot contract with a warning", () => {
+  const source = syntheticObsoleteAppMainEnablementBridgeBundle();
+  const { result, warnings } = captureWarnings(() =>
+    applyLinuxRemoteControlEnablementBridgePatch(source),
+  );
+
+  assert.equal(result, source);
+  assert.ok(warnings.some((warning) => warning.includes("current remote-control gate bridge anchors")));
+  assert.doesNotMatch(result, /codexLinuxRemoteControlEnablementBridge/);
+});
+
+test("Linux remote-control enablement bridge reports obsolete contracts as drift, not already applied", () => {
+  const tempApp = fs.mkdtempSync(path.join(os.tmpdir(), "codex-remote-control-bridge-drift-"));
+  try {
+    const assetsDir = path.join(tempApp, "webview", "assets");
+    const assetPath = path.join(assetsDir, "app-initial-obsolete.js");
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(assetPath, syntheticObsoleteAppMainEnablementBridgeBundle());
+
+    const rawDescriptor = remoteMobilePatchDescriptors.find(
+      (descriptor) => descriptor.id === "linux-remote-control-enablement-bridge",
+    );
+    const [descriptor] = normalizePatchDescriptors([
+      {
+        ...rawDescriptor,
+        sourceKind: "feature",
+        featureId: "remote-mobile-control",
+      },
+    ]);
+    const report = createPatchReport();
+    applyWebviewAssetPatchDescriptors(tempApp, [descriptor], {}, report);
+
+    assert.equal(report.patches.length, 1);
+    assert.equal(report.patches[0].status, "skipped-optional");
+    assert.match(report.patches[0].reason, /current remote-control gate bridge anchors/);
+    assert.equal(fs.readFileSync(assetPath, "utf8"), syntheticObsoleteAppMainEnablementBridgeBundle());
+  } finally {
+    fs.rmSync(tempApp, { recursive: true, force: true });
+  }
 });
 
 test("Linux remote-control enablement bridge omits params for current host toggle handler", async () => {
@@ -2812,7 +2876,7 @@ test("Linux remote-control enablement bridge warns when host toggle params needl
   assert.ok(warnings.some((warning) => warning.includes("enable-for-host params needle")));
 });
 
-test("Linux remote-control enablement bridge auto-connects only this Desktop host", async () => {
+test("Linux remote-control enablement bridge auto-connects this Desktop host without changing other hosts", async () => {
   const source = syntheticAppMainEnablementBridgeBundle();
   const patched = applyLinuxRemoteControlEnablementBridgePatch(source);
 
@@ -2821,7 +2885,7 @@ test("Linux remote-control enablement bridge auto-connects only this Desktop hos
 
   const calls = [];
   const context = {
-    DF: "[remote-connections/slingshot-gate-bridge]",
+    DF: "[remote-connections/gate-bridge]",
     navigator: { userAgent: "X11; Linux x86_64" },
     Promise,
     q: { warning() {} },
@@ -2838,7 +2902,7 @@ test("Linux remote-control enablement bridge auto-connects only this Desktop hos
         return Promise.resolve({
           remoteControlConnections: [
             { hostId: "remote-control:env_local", installationId: "install_local" },
-            { hostId: "remote-control:env_stale", installationId: "install_stale" },
+            { hostId: "remote-control:env_other", installationId: "install_other" },
           ],
         });
       }
@@ -2851,7 +2915,7 @@ test("Linux remote-control enablement bridge auto-connects only this Desktop hos
   vm.runInNewContext(`${patched};OF();`, context);
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].method, "set-remote-control-connections-enabled");
   assert.equal(calls[0].params.enabled, true);
   assert.equal(calls[1].method, "get-global-state");
@@ -2859,9 +2923,14 @@ test("Linux remote-control enablement bridge auto-connects only this Desktop hos
   assert.equal(calls[2].method, "set-remote-connection-auto-connect");
   assert.equal(calls[2].params.hostId, "remote-control:env_local");
   assert.equal(calls[2].params.autoConnect, true);
-  assert.equal(calls[3].method, "set-remote-connection-auto-connect");
-  assert.equal(calls[3].params.hostId, "remote-control:env_stale");
-  assert.equal(calls[3].params.autoConnect, false);
+  assert.equal(
+    calls.some(
+      ({ method, params }) =>
+        method === "set-remote-connection-auto-connect" &&
+        params.hostId === "remote-control:env_other",
+    ),
+    false,
+  );
 });
 
 test("patched Linux device-key provider can create, sign with, and delete a key", async () => {
