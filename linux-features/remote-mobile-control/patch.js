@@ -122,9 +122,11 @@ function linuxDeviceKeyProviderSource({ childProcessVar, cryptoVar, fsVar, pathV
     "function codexLinuxRemoteControlPublicDeviceKey(codexLinuxRemoteControlKeyRecord){",
     "return{algorithm:codexLinuxRemoteControlKeyRecord.algorithm,keyId:codexLinuxRemoteControlKeyRecord.keyId,protectionClass:codexLinuxRemoteControlKeyRecord.protectionClass,publicKeySpkiDerBase64:codexLinuxRemoteControlKeyRecord.publicKeySpkiDerBase64}",
     "}",
+    `function codexLinuxRemoteControlLibsecretSafeStorage(){try{if(typeof process.resourcesPath!==\`string\`)return null;let helper=${pathVar}.resolve(process.resourcesPath,\`../.codex-linux/libsecret-bridge.py\`),stat=${fsVar}.lstatSync(helper),python=codexLinuxRemoteControlResolveExecutable(\`python3\`);if(!stat.isFile()||stat.isSymbolicLink()||stat.uid!==process.getuid()||(stat.mode&511)!==448||python==null)return null;let run=(operation,data)=>{let request=JSON.stringify({operation,data:data==null?undefined:Buffer.from(data).toString(\`base64\`)}),result=${childProcessVar}.spawnSync(python,[helper],{input:request,encoding:\`utf8\`,timeout:10000,maxBuffer:65536});if(result.error||result.status!==0)throw Error(\`Linux remote control Secret Service bridge is unavailable\`);return operation===\`probe\`?null:Buffer.from(result.stdout.trim(),\`base64\`)};run(\`probe\`);return{getSelectedStorageBackend:()=>\`gnome_libsecret\`,isEncryptionAvailable:()=>!0,encryptString:e=>run(\`encrypt\`,Buffer.from(e,\`utf8\`)),decryptString:e=>run(\`decrypt\`,e).toString(\`utf8\`)}}catch{return null}}`,
     "function codexLinuxRemoteControlStorage(){",
     "let codexLinuxRemoteControlSafeStorage=null,codexLinuxRemoteControlDetectedBackend=`unavailable`;",
     "try{let codexLinuxRemoteControlElectron=require(`electron`),codexLinuxRemoteControlCandidate=codexLinuxRemoteControlElectron?.safeStorage;if(codexLinuxRemoteControlCandidate!=null){codexLinuxRemoteControlDetectedBackend=typeof codexLinuxRemoteControlCandidate.getSelectedStorageBackend===`function`?codexLinuxRemoteControlCandidate.getSelectedStorageBackend():`unknown`;if(codexLinuxRemoteControlDetectedBackend!==`unknown`&&codexLinuxRemoteControlDetectedBackend!==`basic_text`&&(typeof codexLinuxRemoteControlCandidate.isEncryptionAvailable!==`function`||codexLinuxRemoteControlCandidate.isEncryptionAvailable()))codexLinuxRemoteControlSafeStorage=codexLinuxRemoteControlCandidate}}catch{}",
+    "if(codexLinuxRemoteControlSafeStorage==null){codexLinuxRemoteControlSafeStorage=codexLinuxRemoteControlLibsecretSafeStorage();if(codexLinuxRemoteControlSafeStorage!=null)codexLinuxRemoteControlDetectedBackend=`gnome_libsecret`}",
     "return{safeStorage:codexLinuxRemoteControlSafeStorage,detectedBackend:codexLinuxRemoteControlDetectedBackend}",
     "}",
     "function codexLinuxRemoteControlStorageFields(codexLinuxRemoteControlPrivateKeyPem){",
@@ -878,6 +880,21 @@ function applyLinuxRemoteConnectionsRefreshPatch(source) {
 function applyLinuxRemoteMobileChromeBridgePatch(source) {
   if (source.includes(REMOTE_MOBILE_CHROME_BRIDGE_MARKER)) {
     return source;
+  }
+
+  // The signed 26.928 Linux build moved backend availability into the browser
+  // service. Keep the external browser available to local Remote sessions.
+  const serviceReaderPattern =
+    /function ([A-Za-z_$][\w$]*)\(([A-Za-z_$][\w$]*)\)\{let ([A-Za-z_$][\w$]*)=([A-Za-z_$][\w$]*)\(\2,([A-Za-z_$][\w$]*)\);return \3==null\?null:([A-Za-z_$][\w$]*)\(\3\)\.filter\(([A-Za-z_$][\w$]*)\)\}/u;
+  if (source.includes("BROWSER_USE_AVAILABLE_BACKENDS") && source.includes('=["chrome","iab","cdp","mcpapps"]')) {
+    const readerMatch = source.match(serviceReaderPattern);
+    if (readerMatch != null) {
+      const [, reader, environment, value, readConfig, configKey, parse, allowed] = readerMatch;
+      return source.replace(
+        serviceReaderPattern,
+        `function ${reader}(${environment}){let ${value}=${readConfig}(${environment},${configKey}),codexLinuxRemoteMobileBrowserBackends=${value}==null?null:${parse}(${value}).filter(${allowed});return process.platform===\`linux\`&&codexLinuxRemoteMobileBrowserBackends!=null&&!codexLinuxRemoteMobileBrowserBackends.includes(\`chrome\`)?[\`chrome\`,...codexLinuxRemoteMobileBrowserBackends]:codexLinuxRemoteMobileBrowserBackends}`,
+      );
+    }
   }
 
   if (browserClientHasNativeChromeBackendPreferenceRouting(source)) {

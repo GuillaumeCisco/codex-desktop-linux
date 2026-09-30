@@ -1,0 +1,9 @@
+{
+  "id": "persistent-full-access-warning-dismissal",
+  "title": "Persistent Full Access Warning Dismissal",
+  "description": "Keep an acknowledged Full access warning dismissed on Linux after its thirty-day timer expires.",
+  "defaultEnabled": false,
+  "entrypoints": {
+    "patchDescriptors": "./patch.js"
+  }
+}

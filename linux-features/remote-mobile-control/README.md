@@ -36,8 +36,9 @@ nix run .#codex-desktop-computer-use-ui-remote-mobile-control
 
 What it changes:
 
-- Replaces the upstream native `remote-control-device-key.node` path with a
-  Linux JavaScript ECDSA P-256 key provider.
+- Replaces the upstream TPM-only `remote-control-device-key.node` path with a
+  Linux JavaScript ECDSA P-256 key provider. This also works on desktops with
+  no TPM device, such as Sugar.
 - Lets the remote-control Connections UI render on Linux when upstream marks
   the feature unavailable or withholds the remote-control visibility rollout.
 - Keeps the `Control other devices` settings tab reachable on Linux so this
@@ -53,8 +54,9 @@ What it changes:
 - Keeps local Linux Remote turns on `summary = "none"` unless a turn explicitly
   requests a reasoning summary, preventing Desktop's rollout gate from adding
   repeated English reasoning titles to the mobile transcript.
-- Keeps Chrome Browser Use available to remote/mobile controlled sessions when
-  the local Chrome plugin and native host are healthy, and adds a diagnostic
+- Keeps the external Chrome-family Browser Use backend (including Brave)
+  available to remote/mobile controlled sessions when the local plugin and
+  native host are healthy, and adds a diagnostic
   when the native browser bridge is not exposed to the session.
 - Persists the private key material at
   `~/.config/codex-desktop/remote-control-device-keys/remote-control-device-keys-v1.json`
@@ -67,9 +69,16 @@ What it changes:
   not confirmed. Unsafe ownership, permissions, file types, schema, or size
   are rejected. An existing key file at the previous location is moved into the
   private directory on first use.
-- Encrypts private key material with Electron `safeStorage` when the Linux
-  desktop exposes GNOME Secret Service/libsecret or KWallet. The hardened JSON
-  store keeps only public metadata and a base64 ciphertext in that mode.
+- Encrypts private key material with Electron `safeStorage` on builds that
+  expose it and have GNOME Secret Service/libsecret or KWallet. The hardened
+  JSON store keeps only public metadata and a base64 ciphertext in that mode.
+- The signed Linux build 26.928 does not link Electron's `safeStorage` binding.
+  On GNOME Secret Service desktops, the staged `libsecret-bridge.py` uses the
+  same Chromium `v11` format and the existing `ChatGPT` keyring entry. It
+  preserves encrypted keys created by earlier Pro builds and encrypts new
+  keys without exposing them in process arguments or logs. This bridge needs
+  Python 3, PyGObject with Secret 1, and `cryptography`; it fails closed for
+  existing encrypted keys when any dependency or the keyring is unavailable.
 - Records the selected storage backend (`gnome_libsecret`, `kwallet`,
   `kwallet5`, or `kwallet6`) in the key metadata. Electron's `basic_text`
   backend is deliberately not treated as a keychain because it does not provide

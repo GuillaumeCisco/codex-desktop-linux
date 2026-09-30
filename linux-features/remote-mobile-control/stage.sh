@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-client="$INSTALL_DIR/resources/plugins/openai-bundled/plugins/chrome/scripts/browser-client.mjs"
+browser_scripts="$INSTALL_DIR/resources/plugins/openai-bundled/plugins/chrome/scripts"
+client="$browser_scripts/browser-service.mjs"
+if [ ! -f "$client" ] || ! grep -q 'BROWSER_USE_AVAILABLE_BACKENDS' "$client"; then
+    client="$browser_scripts/browser-client.mjs"
+fi
 patch_module="$SCRIPT_DIR/linux-features/remote-mobile-control/patch.js"
 feature_marker_dir="$INSTALL_DIR/.codex-linux"
 feature_marker="$feature_marker_dir/remote-mobile-control-enabled"
@@ -12,6 +16,7 @@ cold_start_hook="$cold_start_hook_dir/remote-mobile-control"
 mkdir -p "$feature_marker_dir" "$cold_start_hook_dir"
 printf '%s\n' "remote-mobile-control" > "$feature_marker"
 install -m 0755 "$SCRIPT_DIR/linux-features/remote-mobile-control/cold-start-hook.sh" "$cold_start_hook"
+install -m 0700 "$SCRIPT_DIR/linux-features/remote-mobile-control/libsecret-bridge.py" "$feature_marker_dir/libsecret-bridge.py"
 
 if [ -d "$WORK_DIR/app-extracted/.vite/build" ] &&
     node - "$WORK_DIR/app-extracted/.vite/build" "$patch_module" <<'NODE'
@@ -40,7 +45,7 @@ else
 fi
 
 if [ ! -f "$client" ]; then
-    echo "WARN: Chrome browser-client.mjs not found; skipping remote-mobile Chrome bridge patch" >&2
+    echo "WARN: Chrome Browser Use backend module not found; skipping remote-mobile Chrome bridge patch" >&2
     exit 0
 fi
 

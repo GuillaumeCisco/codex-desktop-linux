@@ -2085,6 +2085,24 @@ test("Linux remote mobile Chrome bridge patch handles current browser-client bac
   assert.deepEqual([...context.module.exports()], ["chrome", "iab"]);
 });
 
+test("Linux remote mobile browser service keeps Brave's Chrome backend available to mobile sessions", () => {
+  const source = [
+    'var U4=["chrome","iab","cdp","mcpapps"],hS="BROWSER_USE_AVAILABLE_BACKENDS";',
+    'function aS(t){return U4.some(e=>e===t)}',
+    'function Ya(t,e){return t[e]}function Vg(t){return t.split(",")}',
+    'function SC(t){let e=Ya(t,hS);return e==null?null:Vg(e).filter(aS)}',
+  ].join("");
+  const patched = applyLinuxRemoteMobileChromeBridgePatch(source);
+  assert.notEqual(patched, source);
+  assert.equal(applyLinuxRemoteMobileChromeBridgePatch(patched), patched);
+  const context = { module: { exports: {} }, process: { platform: "linux" } };
+  vm.runInNewContext(`${patched};module.exports=SC;`, context);
+  assert.deepEqual([...context.module.exports({ BROWSER_USE_AVAILABLE_BACKENDS: "iab" })], ["chrome", "iab"]);
+  assert.equal(context.module.exports({}), null);
+  context.process.platform = "darwin";
+  assert.deepEqual([...context.module.exports({ BROWSER_USE_AVAILABLE_BACKENDS: "iab" })], ["iab"]);
+});
+
 test("Linux remote mobile Chrome bridge patch no-ops on upstream browser preference routing", () => {
   const source = syntheticModernChromeBrowserClientBundle();
   const { result, warnings } = captureWarnings(() => applyLinuxRemoteMobileChromeBridgePatch(source));

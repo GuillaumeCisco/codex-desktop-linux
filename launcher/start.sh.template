@@ -129,6 +129,10 @@ refresh_legacy_bundled_plugin_cache() {
     local cache_dir
     local cache_manifest
     local cache_client
+    local bundled_service
+    local cache_service
+    local refresh_legacy
+    local refresh_remote_browser
     local replacement
     local backup
 
@@ -136,9 +140,22 @@ refresh_legacy_bundled_plugin_cache() {
     while IFS= read -r -d '' cache_dir; do
         cache_manifest="$cache_dir/.codex-plugin/plugin.json"
         cache_client="$cache_dir/scripts/browser-client.mjs"
+        bundled_service="$bundled_plugin/scripts/browser-service.mjs"
+        cache_service="$cache_dir/scripts/browser-service.mjs"
         [ -f "$cache_manifest" ] && [ -f "$cache_client" ] && [ ! -L "$cache_client" ] || continue
         cmp -s "$bundled_manifest" "$cache_manifest" || continue
-        grep -Eq 'codexLinuxPerUserBrowserSocketDir|codexLinuxIabSocketScope' "$cache_client" || continue
+        refresh_legacy=0
+        refresh_remote_browser=0
+        if grep -Eq 'codexLinuxPerUserBrowserSocketDir|codexLinuxIabSocketScope' "$cache_client"; then
+            refresh_legacy=1
+        fi
+        if [ -f "$bundled_service" ] && [ -f "$cache_service" ] && [ ! -L "$cache_service" ] &&
+           ! cmp -s "$bundled_service" "$cache_service" &&
+           { grep -q 'codexLinuxRemoteMobileBrowserBackends' "$bundled_service" ||
+             grep -q 'codexLinuxRemoteMobileBrowserBackends' "$cache_service"; }; then
+            refresh_remote_browser=1
+        fi
+        [ "$refresh_legacy" = 1 ] || [ "$refresh_remote_browser" = 1 ] || continue
 
         replacement="${cache_dir}.community-refresh.$$"
         backup="${cache_dir}.community-legacy.$$"
