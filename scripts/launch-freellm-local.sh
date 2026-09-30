@@ -3,7 +3,7 @@ set -euo pipefail
 
 # A separate profile lets FreeLLM and Pro run from the same tested app payload.
 state_dir="${CODEX_FREELLM_STATE_DIR:-$HOME/.local/state/codex-freellm-desktop}"
-app_dir="${CODEX_FREELLM_APP_DIR:-$HOME/.local/opt/codex-desktop-linux/codex-app-official-linux-26.928.21956-pro-candidate-v3}"
+app_dir="${CODEX_FREELLM_APP_DIR:-$HOME/.local/opt/codex-desktop-linux/codex-app-26.928.21956}"
 secret_dir="${CODEX_FREELLM_SECRET_DIR:-$HOME/.config/codex-freellm}"
 
 for required in \
